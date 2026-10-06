@@ -1,0 +1,1 @@
+# gui-torrent-magnet-search
