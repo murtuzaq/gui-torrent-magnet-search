@@ -1,0 +1,2 @@
+# Optional: enables movie cover art in the preview panel. The app runs on the standard library alone.
+Pillow>=10
