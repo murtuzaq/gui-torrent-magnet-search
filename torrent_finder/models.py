@@ -1,10 +1,11 @@
 """Shared data types and helpers."""
 from __future__ import annotations
 
+import html
 import re
 import urllib.parse
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 
 FILE_TYPES = ["Video", "Audio", "Image", "Ebook / Text", "Software", "Games", "Other"]
 
@@ -52,6 +53,10 @@ class TorrentResult:
 
     def __post_init__(self):
         self.info_hash = self.info_hash.strip().upper()
+        self.name = html.unescape(self.name)  # some sites send &amp; / &ndash; in titles
+        if self.added and self.added.tzinfo is None:
+            # Sites disagree on whether dates carry a timezone; mixing the two breaks comparisons.
+            self.added = self.added.replace(tzinfo=timezone.utc)
         if not self.magnet:
             self.magnet = build_magnet(self.info_hash, self.name)
 

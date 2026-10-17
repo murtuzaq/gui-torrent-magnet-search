@@ -7,6 +7,7 @@ import queue
 import sys
 import threading
 import tkinter as tk
+import traceback
 import webbrowser
 from datetime import datetime, timezone
 from tkinter import font as tkfont, messagebox, ttk
@@ -308,12 +309,18 @@ class TorrentFinderApp(tk.Tk):
             self.messages.put(("results", sid, provider.name, [], exc))
 
     def _poll_messages(self):
+        # Always reschedule: if this loop dies, no later search can ever reach the table.
         try:
             while True:
-                self._handle_message(self.messages.get_nowait())
+                msg = self.messages.get_nowait()
+                try:
+                    self._handle_message(msg)
+                except Exception:  # noqa: BLE001 - one bad message must not stall the app
+                    traceback.print_exc()
         except queue.Empty:
             pass
-        self.after(100, self._poll_messages)
+        finally:
+            self.after(100, self._poll_messages)
 
     def _handle_message(self, msg):
         kind = msg[0]
@@ -321,17 +328,21 @@ class TorrentFinderApp(tk.Tk):
             _, sid, site, found, error = msg
             if sid != self.search_id:
                 return  # stale results from a previous search
-            for r in found:
-                if not r.info_hash:
-                    continue
-                existing = self.results.get(r.info_hash)
-                if existing:
-                    existing.merge(r)
-                else:
-                    self.results[r.info_hash] = r
-            now = datetime.now(timezone.utc)
-            for r in self.results.values():
-                compute_health(r, now)
+            try:
+                for r in found:
+                    if not r.info_hash:
+                        continue
+                    existing = self.results.get(r.info_hash)
+                    if existing:
+                        existing.merge(r)
+                    else:
+                        self.results[r.info_hash] = r
+                now = datetime.now(timezone.utc)
+                for r in self.results.values():
+                    compute_health(r, now)
+            except Exception as exc:  # noqa: BLE001 - report it, but still finish this site
+                traceback.print_exc()
+                error = error or exc
             self.site_status[site] = f"error - {error}" if error else f"{len(found)} results"
             self.pending -= 1
             if self.pending <= 0:
